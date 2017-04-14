@@ -77,13 +77,39 @@ var getZobristHash = setupZobristHashing();
 
 /* Transposition table */
 
-var TABLE_SIZE = 5e6;
+/**
+ * The transposition table is a large cache of moves we've previously explored with minimax.
+ *
+ * Storing prior moves allows us to speed up future moves by retrieving the game state of previously explored moves in
+ * our decision tree.
+ */
+
+// We need to set a limit on the number of moves
+var TABLE_SIZE = 2e6;
+
 transpositionTable = new Array(TABLE_SIZE);
 
+/**
+ * The transposition table is implemented by a fixed-size array.
+ *
+ * We can then map a Zobrist hash value of a game state to an index in our array by using a modulus.
+ */
 var transpositionTableIdx = function(zobristKey) {
     return Math.abs(zobristKey) % TABLE_SIZE;
 };
 
+/**
+ * Insert a move into the transposition table
+ *
+ * @param zobristKey A zobrist hash of this move's position
+ * @param depth The minimax depth this move was calculated at
+ * @param value The best evaluation score for this move's position
+ * @param move The best move for this node (corresponds to `value`)
+ * @param flag Whether or not we exceeded alpha or beta. There are three possibilities:
+ *    - alpha/beta were not exceeded (FLAG_EXACT)
+ *    - we exceeded alpha (FLAG_UPPER)
+ *    - we fell below beta (FLAG_LOWER)
+ */
 var transpositionTablePut = function (zobristKey, depth, value, move, flag) {
     var idx = transpositionTableIdx(zobristKey);
 
@@ -96,11 +122,16 @@ var transpositionTablePut = function (zobristKey, depth, value, move, flag) {
     };
 };
 
+/**
+ * Fetch a move from the transposition table via a given zobristKey, returns null if no move was found.
+ */
 var transpositionTableGet = function (zobristKey) {
     var idx = transpositionTableIdx(zobristKey);
 
     var previousValue = transpositionTable[idx];
 
+    // We need to check the hash matches, since it's possible two different board states can map to the same
+    // transposition table index
     if (previousValue && (previousValue.hash == zobristKey)) {
         return previousValue
     } else {
