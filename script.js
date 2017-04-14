@@ -1,6 +1,66 @@
 var board,
     game = new Chess();
 
+/* Zobrist hashing algorithm */
+
+
+
+function setupZobristHashing() {
+  var N_BITS = 32;
+
+  var pieceValues = {
+    'w': {
+      'p': 1,  // White pawn
+      'r': 2,  // White rook
+      'n': 3,  // White knight
+      'b': 4,  // White bishop
+      'q': 5,  // White queen
+      'k': 6   // White king
+    },
+
+    'b': {
+      'p': 7,  // Black pawn
+      'r': 8,  // Black rook
+      'n': 9,  // Black knight
+      'b': 10, // Black bishop
+      'q': 11, // Black queen
+      'k': 12  // Black king
+    }
+  };
+
+  var zobristLookupTable = [];
+
+  for (var i = 0; i < 64; ++i) {
+    zobristLookupTable.push(new Uint32Array(12));
+
+    for (var j = 0; j < 12; ++j) {
+      var random_bitstring = Math.random() * Math.pow(2, N_BITS);
+
+      zobristLookupTable[i][j] = random_bitstring;
+    }
+  }
+
+  return function (game) {
+    var h = 0;
+
+    var board = game.board();
+
+    for (var i = 0; i < board.length; ++i) {
+      for (var j = 0; j < board.length; ++j) {
+        var square = board[i][j];
+
+        if (square) {
+          h ^= (pieceValues[square.color][square.type] * zobristLookupTable[i][j])
+        }
+      }
+    }
+
+    return h
+  };
+}
+
+var getZobristHash = setupZobristHashing();
+
 /*The "AI" part starts here */
 
 var minimaxRoot =function(depth, game, isMaximisingPlayer) {
