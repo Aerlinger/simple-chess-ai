@@ -1,6 +1,10 @@
 var board,
     game = new Chess();
 
+var FLAG_EXACT = 0;
+var FLAG_UPPER = 1;
+var FLAG_LOWER = 2;
+
 /* Zobrist hashing algorithm */
 
 
@@ -104,14 +108,19 @@ var transpositionTableIdx = function(zobristKey) {
  * @param zobristKey A zobrist hash of this move's position
  * @param depth The minimax depth this move was calculated at
  * @param value The best evaluation score for this move's position
+ * @param flag Whether or not we exceeded alpha or beta. There are three possibilities:
+ *    - alpha/beta were not exceeded (FLAG_EXACT)
+ *    - we exceeded alpha (FLAG_UPPER)
+ *    - we fell below beta (FLAG_LOWER)
  */
-var transpositionTablePut = function (zobristKey, depth, value) {
+var transpositionTablePut = function (zobristKey, depth, value, flag) {
     var idx = transpositionTableIdx(zobristKey);
 
     transpositionTable[idx] = {
         hash: zobristKey,
         depth: depth,
-        value: value
+        value: value,
+        flag: flag
     };
 };
 
@@ -160,8 +169,18 @@ var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
     var zobristKey = getZobristHash(game.board());
     var cachedBoardState = transpositionTableGet(zobristKey);
 
-    if (cachedBoardState && cachedBoardState.depth >= depth) {
-        return cachedBoardState.value;
+    if (cachedBoardState && cachedBoardState.depth > depth) {
+        if (cachedBoardState.flag == FLAG_EXACT)
+            return cachedBoardState.value;
+
+        if (cachedBoardState.flag == FLAG_UPPER)
+            beta = Math.min(beta, cachedBoardState.value);
+
+        if (cachedBoardState.flag == FLAG_LOWER)
+            alpha = Math.max(alpha, cachedBoardState.value);
+
+        if (alpha > beta)
+            return cachedBoardState.value;
     }
 
     if (depth === 0) {
@@ -182,6 +201,7 @@ var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
 
             alpha = Math.max(alpha, bestMove);
             if (beta <= alpha) {
+                transpositionTablePut(zobristKey, depth, alpha, FLAG_UPPER);
                 return bestMove;
             }
         }
@@ -196,12 +216,13 @@ var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
 
             beta = Math.min(beta, bestMove);
             if (beta <= alpha) {
+                transpositionTablePut(zobristKey, depth, bestMove, FLAG_LOWER);
                 return bestMove;
             }
         }
     }
 
-    transpositionTablePut(zobristKey, depth, bestMove);
+    transpositionTablePut(zobristKey, depth, bestMove, FLAG_EXACT);
     return bestMove;
 };
 
