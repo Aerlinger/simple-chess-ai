@@ -11,66 +11,66 @@ var board,
  * This function is curried so it only needs to be called once. The returned hash function can be called many times.
  */
 function setupZobristHashing() {
-  var N_BITS = 32;
+    var N_BITS = 32;
 
-  var pieceValues = {
-    'w': {
-      'p': 1,  // White pawn
-      'r': 2,  // White rook
-      'n': 3,  // White knight
-      'b': 4,  // White bishop
-      'q': 5,  // White queen
-      'k': 6   // White king
-    },
+    var pieceValues = {
+        'w': {
+            'p': 1,  // White pawn
+            'r': 2,  // White rook
+            'n': 3,  // White knight
+            'b': 4,  // White bishop
+            'q': 5,  // White queen
+            'k': 6   // White king
+        },
 
-    'b': {
-      'p': 7,  // Black pawn
-      'r': 8,  // Black rook
-      'n': 9,  // Black knight
-      'b': 10, // Black bishop
-      'q': 11, // Black queen
-      'k': 12  // Black king
-    }
-  };
-
-  var zobristLookupTable = [];
-
-  // For each of the 64 squares on the board
-  for (var i = 0; i < 64; ++i) {
-    zobristLookupTable.push(new Uint32Array(12));
-
-    // For each of the 12 possible piece types (i.e. entries in `pieceValues` maps 6 piece types for each player color)
-    for (var j = 0; j < 12; ++j) {
-      var random_bitstring = Math.random() * Math.pow(2, N_BITS);  // Subtract 2 from N_BITS to prevent overflow
-
-      // Each square, piece state maps to a random bitstring which will be used to generate a unique hash value
-      zobristLookupTable[i][j] = random_bitstring;
-    }
-  }
-
-  /**
-   * A fast hash function which maps a board state to a unique integer
-   */
-  return function(board) {
-    var h = 0;
-
-    /*
-      TODO: It'd be nice if we could iterate over pieces on the board here instead of each of the 64 squares as there
-      can only be a maximum of 12 pieces on the board at any given time. I don't think this is easily supported by
-      chess.js, however.
-     */
-    for (var i = 0; i < board.length; ++i) {
-      for (var j = 0; j < board.length; ++j) {
-        var square = board[i][j];
-
-        if (square) {
-          h ^= (pieceValues[square.color][square.type] * zobristLookupTable[i][j])
+        'b': {
+            'p': 7,  // Black pawn
+            'r': 8,  // Black rook
+            'n': 9,  // Black knight
+            'b': 10, // Black bishop
+            'q': 11, // Black queen
+            'k': 12  // Black king
         }
-      }
+    };
+
+    var zobristLookupTable = [];
+
+    // For each of the 64 squares on the board
+    for (var i = 0; i < 64; ++i) {
+        zobristLookupTable.push(new Uint32Array(12));
+
+        // For each of the 12 possible piece types (i.e. entries in `pieceValues` maps 6 piece types for each player color)
+        for (var j = 0; j < 12; ++j) {
+            var random_bitstring = Math.random() * Math.pow(2, N_BITS);  // Subtract 2 from N_BITS to prevent overflow
+
+            // Each square, piece state maps to a random bitstring which will be used to generate a unique hash value
+            zobristLookupTable[i][j] = random_bitstring;
+        }
     }
 
-    return h
-  };
+    /**
+     * A fast hash function which maps a board state to a unique integer
+     */
+    return function (board) {
+        var h = 0;
+
+        /*
+         TODO: It'd be nice if we could iterate over pieces on the board here instead of each of the 64 squares as there
+         can only be a maximum of 12 pieces on the board at any given time. I don't think this is easily supported by
+         chess.js, however.
+         */
+        for (var i = 0; i < board.length; ++i) {
+            for (var j = 0; j < board.length; ++j) {
+                var square = board[i][j];
+
+                if (square) {
+                    h ^= (pieceValues[square.color][square.type] * zobristLookupTable[i][j])
+                }
+            }
+        }
+
+        return h
+    };
 }
 
 var getZobristHash = setupZobristHashing();
