@@ -4,7 +4,12 @@ var board,
 /* Zobrist hashing algorithm */
 
 
-
+/**
+ * Returns function which accepts a board object as its only parameter and returns a unique hash value based on that
+ * board's position.
+ *
+ * This function is curried so it only needs to be called once. The returned hash function can be called many times.
+ */
 function setupZobristHashing() {
   var N_BITS = 32;
 
@@ -30,21 +35,30 @@ function setupZobristHashing() {
 
   var zobristLookupTable = [];
 
+  // For each of the 64 squares on the board
   for (var i = 0; i < 64; ++i) {
     zobristLookupTable.push(new Uint32Array(12));
 
+    // For each of the 12 possible piece types (i.e. entries in `pieceValues` maps 6 piece types for each player color)
     for (var j = 0; j < 12; ++j) {
-      var random_bitstring = Math.random() * Math.pow(2, N_BITS);
+      var random_bitstring = Math.random() * Math.pow(2, N_BITS);  // Subtract 2 from N_BITS to prevent overflow
 
+      // Each square, piece state maps to a random bitstring which will be used to generate a unique hash value
       zobristLookupTable[i][j] = random_bitstring;
     }
   }
 
-  return function (game) {
+  /**
+   * A fast hash function which maps a board state to a unique integer
+   */
+  return function(board) {
     var h = 0;
 
-    var board = game.board();
-
+    /*
+      TODO: It'd be nice if we could iterate over pieces on the board here instead of each of the 64 squares as there
+      can only be a maximum of 12 pieces on the board at any given time. I don't think this is easily supported by
+      chess.js, however.
+     */
     for (var i = 0; i < board.length; ++i) {
       for (var j = 0; j < board.length; ++j) {
         var square = board[i][j];
@@ -271,6 +285,8 @@ var getBestMove = function (game) {
     var d2 = new Date().getTime();
     var moveTime = (d2 - d);
     var positionsPerS = ( positionCount * 1000 / moveTime);
+
+    console.log("Move", getZobristHash(game.board()), bestMove);
 
     $('#position-count').text(positionCount);
     $('#time').text(moveTime/1000 + 's');
