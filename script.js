@@ -41,10 +41,10 @@ function setupZobristHashing() {
 
         // For each of the 12 possible piece types (i.e. entries in `pieceValues` maps 6 piece types for each player color)
         for (var j = 0; j < 12; ++j) {
-            var random_bitstring = Math.random() * Math.pow(2, N_BITS);  // Subtract 2 from N_BITS to prevent overflow
+            var randomBitstring = Math.random() * Math.pow(2, N_BITS);  // Subtract 2 from N_BITS to prevent overflow
 
             // Each square, piece state maps to a random bitstring which will be used to generate a unique hash value
-            zobristLookupTable[i][j] = random_bitstring;
+            zobristLookupTable[i][j] = randomBitstring;
         }
     }
 
@@ -74,6 +74,40 @@ function setupZobristHashing() {
 }
 
 var getZobristHash = setupZobristHashing();
+
+/* Transposition table */
+
+var TABLE_SIZE = 5e6;
+transpositionTable = new Array(TABLE_SIZE);
+
+var transpositionTableIdx = function(zobristKey) {
+    return Math.abs(zobristKey) % TABLE_SIZE;
+};
+
+var transpositionTablePut = function (zobristKey, depth, value, move, flag) {
+    var idx = transpositionTableIdx(zobristKey);
+
+    transpositionTable[idx] = {
+        hash: zobristKey,
+        depth: depth,
+        value: value,
+        move: move,
+        flag: flag
+    };
+};
+
+var transpositionTableGet = function (zobristKey) {
+    var idx = transpositionTableIdx(zobristKey);
+
+    var previousValue = transpositionTable[idx];
+
+    if (previousValue && (previousValue.hash == zobristKey)) {
+        return previousValue
+    } else {
+        return null
+    }
+};
+
 
 /*The "AI" part starts here */
 
