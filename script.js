@@ -104,21 +104,14 @@ var transpositionTableIdx = function(zobristKey) {
  * @param zobristKey A zobrist hash of this move's position
  * @param depth The minimax depth this move was calculated at
  * @param value The best evaluation score for this move's position
- * @param move The best move for this node (corresponds to `value`)
- * @param flag Whether or not we exceeded alpha or beta. There are three possibilities:
- *    - alpha/beta were not exceeded (FLAG_EXACT)
- *    - we exceeded alpha (FLAG_UPPER)
- *    - we fell below beta (FLAG_LOWER)
  */
-var transpositionTablePut = function (zobristKey, depth, value, move, flag) {
+var transpositionTablePut = function (zobristKey, depth, value) {
     var idx = transpositionTableIdx(zobristKey);
 
     transpositionTable[idx] = {
         hash: zobristKey,
         depth: depth,
-        value: value,
-        move: move,
-        flag: flag
+        value: value
     };
 };
 
@@ -163,37 +156,53 @@ var minimaxRoot =function(depth, game, isMaximisingPlayer) {
 
 var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
     positionCount++;
+
+    var zobristKey = getZobristHash(game.board());
+    var cachedBoardState = transpositionTableGet(zobristKey);
+
+    if (cachedBoardState && cachedBoardState.depth >= depth) {
+        return cachedBoardState.value;
+    }
+
     if (depth === 0) {
         return -evaluateBoard(game.board());
     }
 
     var newGameMoves = game.ugly_moves();
+    var bestMove;
 
     if (isMaximisingPlayer) {
-        var bestMove = -9999;
+        bestMove = -9999;
+
         for (var i = 0; i < newGameMoves.length; i++) {
             game.simple_move(newGameMoves[i]);
-            bestMove = Math.max(bestMove, minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer));
+            var nextMoveValue = minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer);
+            bestMove = Math.max(bestMove, nextMoveValue);
             game.simple_undo();
+
             alpha = Math.max(alpha, bestMove);
             if (beta <= alpha) {
                 return bestMove;
             }
         }
-        return bestMove;
     } else {
-        var bestMove = 9999;
+        bestMove = 9999;
+
         for (var i = 0; i < newGameMoves.length; i++) {
             game.simple_move(newGameMoves[i]);
-            bestMove = Math.min(bestMove, minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer));
+            var nextMoveValue = minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer);
+            bestMove = Math.min(bestMove, nextMoveValue);
             game.simple_undo();
+
             beta = Math.min(beta, bestMove);
             if (beta <= alpha) {
                 return bestMove;
             }
         }
-        return bestMove;
     }
+
+    transpositionTablePut(zobristKey, depth, bestMove);
+    return bestMove;
 };
 
 var evaluateBoard = function (board) {
@@ -350,8 +359,6 @@ var getBestMove = function (game) {
     var d2 = new Date().getTime();
     var moveTime = (d2 - d);
     var positionsPerS = ( positionCount * 1000 / moveTime);
-
-    console.log("Move", getZobristHash(game.board()), bestMove);
 
     $('#position-count').text(positionCount);
     $('#time').text(moveTime/1000 + 's');
