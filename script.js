@@ -153,6 +153,18 @@ var transpositionTableGet = function (zobristKey) {
     }
 };
 
+var swapMoves = function (arr, sourceIdx, destIdx) {
+    var temp = arr[sourceIdx];
+
+    arr[sourceIdx] = arr[destIdx];
+    arr[destIdx] = temp;
+
+    return arr;
+};
+
+var uglyMoveKey = function (ugly_move) {
+    return ugly_move.color + ugly_move.piece + ugly_move.from + ugly_move.to
+};
 
 /*The "AI" part starts here */
 
@@ -206,6 +218,18 @@ var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
     if (isMaximisingPlayer) {
         bestMove = -9999;
 
+        if (cachedBoardState && cachedBoardState.depth <= depth &&
+            (cachedBoardState.flag == FLAG_UPPER || cachedBoardState.flag == FLAG_EXACT)
+        ) {
+            for (var i = 0; i < newGameMoves.length; i++) {
+                if (uglyMoveKey(newGameMoves[i]) == uglyMoveKey(cachedBoardState.move)) {
+                    swapMoves(newGameMoves, 0, i);
+
+                    break;
+                }
+            }
+        }
+
         for (var i = 0; i < newGameMoves.length; i++) {
             game.simple_move(newGameMoves[i]);
             var nextMoveValue = minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer);
@@ -218,24 +242,36 @@ var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
 
             alpha = Math.max(alpha, bestMove);
             if (beta <= alpha) {
-                transpositionTablePut(zobristKey, depth, alpha, bestMoveFound, FLAG_UPPER);
+                transpositionTablePut(zobristKey, depth, bestMove, bestMoveFound, FLAG_UPPER);
                 return bestMove;
             }
         }
     } else {
         bestMove = 9999;
 
+        if (cachedBoardState && cachedBoardState.depth <= depth &&
+            (cachedBoardState.flag == FLAG_LOWER || cachedBoardState.flag == FLAG_EXACT)
+        ) {
+            for (var i = 0; i < newGameMoves.length; i++) {
+                if (uglyMoveKey(newGameMoves[i]) == uglyMoveKey(cachedBoardState.move)) {
+                    swapMoves(newGameMoves, 0, i);
+
+                    break;
+                }
+            }
+        }
+
         for (var i = 0; i < newGameMoves.length; i++) {
             game.simple_move(newGameMoves[i]);
             var nextMoveValue = minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer);
             game.simple_undo();
 
-            beta = Math.min(beta, bestMove);
-
             if (nextMoveValue < bestMove) {
                 bestMove = nextMoveValue;
                 bestMoveFound = newGameMoves[i];
             }
+
+            beta = Math.min(beta, bestMove);
 
             if (beta <= alpha) {
                 transpositionTablePut(zobristKey, depth, bestMove, bestMoveFound, FLAG_LOWER);
