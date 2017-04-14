@@ -116,12 +116,23 @@ var transpositionTableIdx = function(zobristKey) {
 var transpositionTablePut = function (zobristKey, depth, value, flag) {
     var idx = transpositionTableIdx(zobristKey);
 
-    transpositionTable[idx] = {
-        hash: zobristKey,
-        depth: depth,
-        value: value,
-        flag: flag
-    };
+    var previousValue = transpositionTable[idx];
+    var newValue;
+
+    if (previousValue && (previousValue.hash == zobristKey)) {
+        if (previousValue.depth > depth) {
+            newValue = previousValue;
+        }
+    } else {
+        newValue = {
+            hash: zobristKey,
+            depth: depth,
+            value: value,
+            flag: flag
+        }
+    }
+
+    transpositionTable[idx] = newValue;
 };
 
 /**
