@@ -190,6 +190,10 @@ var minimaxRoot = function(depth, game, isMaximisingPlayer) {
 var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
     positionCount++;
 
+    if (depth === 0) {
+        return -evaluateBoard(game.board());
+    }
+
     var zobristKey = getZobristHash(game.board());
     var cachedBoardState = transpositionTableGet(zobristKey);
 
@@ -205,10 +209,6 @@ var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
 
         if (alpha > beta)
             return cachedBoardState.value;
-    }
-
-    if (depth === 0) {
-        return -evaluateBoard(game.board());
     }
 
     var newGameMoves = game.ugly_moves();
@@ -241,6 +241,7 @@ var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
             }
 
             alpha = Math.max(alpha, bestMove);
+
             if (beta <= alpha) {
                 transpositionTablePut(zobristKey, depth, bestMove, bestMoveFound, FLAG_UPPER);
                 return bestMove;
