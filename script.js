@@ -1,9 +1,174 @@
 var board,
     game = new Chess();
 
+var FLAG_EXACT = 0;
+var FLAG_UPPER = 1;
+var FLAG_LOWER = 2;
+
+/* Zobrist hashing algorithm */
+
+
+/**
+ * Returns function which accepts a board object as its only parameter and returns a unique hash value based on that
+ * board's position.
+ *
+ * This function is curried so it only needs to be called once. The returned hash function can be called many times.
+ */
+function setupZobristHashing() {
+    var N_BITS = 32;
+
+    var pieceValues = {
+        'w': {
+            'p': 1,  // White pawn
+            'r': 2,  // White rook
+            'n': 3,  // White knight
+            'b': 4,  // White bishop
+            'q': 5,  // White queen
+            'k': 6   // White king
+        },
+
+        'b': {
+            'p': 7,  // Black pawn
+            'r': 8,  // Black rook
+            'n': 9,  // Black knight
+            'b': 10, // Black bishop
+            'q': 11, // Black queen
+            'k': 12  // Black king
+        }
+    };
+
+    var zobristLookupTable = [];
+
+    // For each of the 64 squares on the board
+    for (var i = 0; i < 64; ++i) {
+        zobristLookupTable.push(new Uint32Array(12));
+
+        // For each of the 12 possible piece types (i.e. entries in `pieceValues` maps 6 piece types for each player color)
+        for (var j = 0; j < 12; ++j) {
+            var randomBitstring = Math.random() * Math.pow(2, N_BITS);  // Subtract 2 from N_BITS to prevent overflow
+
+            // Each square, piece state maps to a random bitstring which will be used to generate a unique hash value
+            zobristLookupTable[i][j] = randomBitstring;
+        }
+    }
+
+    /**
+     * A fast hash function which maps a board state to a unique integer
+     */
+    return function (board) {
+        var h = 0;
+
+        /*
+         TODO: It'd be nice if we could iterate over pieces on the board here instead of each of the 64 squares as there
+         can only be a maximum of 12 pieces on the board at any given time. I don't think this is easily supported by
+         chess.js, however.
+         */
+        for (var i = 0; i < board.length; ++i) {
+            for (var j = 0; j < board.length; ++j) {
+                var square = board[i][j];
+
+                if (square) {
+                    h ^= (pieceValues[square.color][square.type] * zobristLookupTable[i][j])
+                }
+            }
+        }
+
+        return h
+    };
+}
+
+var getZobristHash = setupZobristHashing();
+
+/* Transposition table */
+
+/**
+ * The transposition table is a large cache of moves we've previously explored with minimax.
+ *
+ * Storing prior moves allows us to speed up future moves by retrieving the game state of previously explored moves in
+ * our decision tree.
+ */
+
+// We need to set a limit on the number of moves
+var TABLE_SIZE = 2e6;
+
+transpositionTable = new Array(TABLE_SIZE);
+
+/**
+ * The transposition table is implemented by a fixed-size array.
+ *
+ * We can then map a Zobrist hash value of a game state to an index in our array by using a modulus.
+ */
+var transpositionTableIdx = function(zobristKey) {
+    return Math.abs(zobristKey) % TABLE_SIZE;
+};
+
+/**
+ * Insert a move into the transposition table
+ *
+ * @param zobristKey A zobrist hash of this move's position
+ * @param depth The minimax depth this move was calculated at
+ * @param value The best evaluation score for this move's position
+ * @param flag Whether or not we exceeded alpha or beta. There are three possibilities:
+ *    - alpha/beta were not exceeded (FLAG_EXACT)
+ *    - we exceeded alpha (FLAG_UPPER)
+ *    - we fell below beta (FLAG_LOWER)
+ */
+var transpositionTablePut = function (zobristKey, depth, value, move, flag) {
+    var idx = transpositionTableIdx(zobristKey);
+
+    var previousValue = transpositionTable[idx];
+    var newValue;
+
+    if (previousValue && (previousValue.hash == zobristKey)) {
+        if (previousValue.depth > depth) {
+            newValue = previousValue;
+        }
+    } else {
+        newValue = {
+            hash: zobristKey,
+            depth: depth,
+            value: value,
+            move: move,
+            flag: flag
+        }
+    }
+
+    transpositionTable[idx] = newValue;
+};
+
+/**
+ * Fetch a move from the transposition table via a given zobristKey, returns null if no move was found.
+ */
+var transpositionTableGet = function (zobristKey) {
+    var idx = transpositionTableIdx(zobristKey);
+
+    var previousValue = transpositionTable[idx];
+
+    // We need to check the hash matches, since it's possible two different board states can map to the same
+    // transposition table index
+    if (previousValue && (previousValue.hash == zobristKey)) {
+        return previousValue
+    } else {
+        return null
+    }
+};
+
+var swapMoves = function (arr, sourceIdx, destIdx) {
+    var temp = arr[sourceIdx];
+
+    arr[sourceIdx] = arr[destIdx];
+    arr[destIdx] = temp;
+
+    return arr;
+};
+
+var uglyMoveKey = function (ugly_move) {
+    return ugly_move.color + ugly_move.piece + ugly_move.from + ugly_move.to
+};
+
 /*The "AI" part starts here */
 
-var minimaxRoot =function(depth, game, isMaximisingPlayer) {
+var minimaxRoot = function(depth, game, isMaximisingPlayer) {
 
     var newGameMoves = game.ugly_moves();
     var bestMove = -9999;
@@ -24,37 +189,100 @@ var minimaxRoot =function(depth, game, isMaximisingPlayer) {
 
 var minimax = function (depth, game, alpha, beta, isMaximisingPlayer) {
     positionCount++;
+
     if (depth === 0) {
         return -evaluateBoard(game.board());
     }
 
+    var zobristKey = getZobristHash(game.board());
+    var cachedBoardState = transpositionTableGet(zobristKey);
+
+    if (cachedBoardState && cachedBoardState.depth > depth) {
+        if (cachedBoardState.flag == FLAG_EXACT)
+            return cachedBoardState.value;
+
+        if (cachedBoardState.flag == FLAG_UPPER)
+            beta = Math.min(beta, cachedBoardState.value);
+
+        if (cachedBoardState.flag == FLAG_LOWER)
+            alpha = Math.max(alpha, cachedBoardState.value);
+
+        if (alpha > beta)
+            return cachedBoardState.value;
+    }
+
     var newGameMoves = game.ugly_moves();
+    var bestMove;
+    var bestMoveFound;
 
     if (isMaximisingPlayer) {
-        var bestMove = -9999;
+        bestMove = -9999;
+
+        if (cachedBoardState && cachedBoardState.depth <= depth &&
+            (cachedBoardState.flag == FLAG_UPPER || cachedBoardState.flag == FLAG_EXACT)
+        ) {
+            for (var i = 0; i < newGameMoves.length; i++) {
+                if (uglyMoveKey(newGameMoves[i]) == uglyMoveKey(cachedBoardState.move)) {
+                    swapMoves(newGameMoves, 0, i);
+
+                    break;
+                }
+            }
+        }
+
         for (var i = 0; i < newGameMoves.length; i++) {
             game.simple_move(newGameMoves[i]);
-            bestMove = Math.max(bestMove, minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer));
+            var nextMoveValue = minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer);
             game.simple_undo();
+
+            if (nextMoveValue > bestMove) {
+                bestMove = nextMoveValue;
+                bestMoveFound = newGameMoves[i];
+            }
+
             alpha = Math.max(alpha, bestMove);
+
             if (beta <= alpha) {
+                transpositionTablePut(zobristKey, depth, bestMove, bestMoveFound, FLAG_UPPER);
                 return bestMove;
             }
         }
-        return bestMove;
     } else {
-        var bestMove = 9999;
+        bestMove = 9999;
+
+        if (cachedBoardState && cachedBoardState.depth <= depth &&
+            (cachedBoardState.flag == FLAG_LOWER || cachedBoardState.flag == FLAG_EXACT)
+        ) {
+            for (var i = 0; i < newGameMoves.length; i++) {
+                if (uglyMoveKey(newGameMoves[i]) == uglyMoveKey(cachedBoardState.move)) {
+                    swapMoves(newGameMoves, 0, i);
+
+                    break;
+                }
+            }
+        }
+
         for (var i = 0; i < newGameMoves.length; i++) {
             game.simple_move(newGameMoves[i]);
-            bestMove = Math.min(bestMove, minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer));
+            var nextMoveValue = minimax(depth - 1, game, alpha, beta, !isMaximisingPlayer);
             game.simple_undo();
+
+            if (nextMoveValue < bestMove) {
+                bestMove = nextMoveValue;
+                bestMoveFound = newGameMoves[i];
+            }
+
             beta = Math.min(beta, bestMove);
+
             if (beta <= alpha) {
+                transpositionTablePut(zobristKey, depth, bestMove, bestMoveFound, FLAG_LOWER);
                 return bestMove;
             }
         }
-        return bestMove;
     }
+
+    transpositionTablePut(zobristKey, depth, bestMove, bestMoveFound, FLAG_EXACT);
+    return bestMove;
 };
 
 var evaluateBoard = function (board) {
